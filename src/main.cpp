@@ -4,44 +4,11 @@
 #include <RadioLib.h>
 #include <TinyGPS++.h>
 #include <Adafruit_BNO08x.h>
+#include "config.h" // Include the new config file
 #include "NrfPersistence.h"
 #include "LoraWanHandler.h"
 #include "Oiler.h"
 #include "ImuHandler.h"
-
-// --- Pin Definitions (Heltec T114 / nRF52840) ---
-// Note: Verify these against the T114 Schematic!
-#define LORA_NSS 29
-#define LORA_DIO1 45
-#define LORA_NRST 44
-#define LORA_BUSY 43
-
-#define GPS_RX_PIN 42
-#define GPS_TX_PIN 40
-
-#define IMU_SDA 26
-#define IMU_SCL 27
-#define IMU_INT_PIN 35 // Interrupt Pin for Wakeup
-
-#define PUMP_PIN 6 
-#define LED_PIN 34 // Builtin LED or external
-
-#define IGNITION_PIN 5 // Input to detect 12V (via divider)
-#define BATTERY_PIN 4  // ADC for Battery Voltage
-#define USER_BUTTON_PIN 0 // Boot Button (P0.00) - Change if using external button
-
-// --- Constants ---
-#define COOLDOWN_TIME_MS (5 * 60 * 60 * 1000) // 5 Hours Listening Mode
-#define EXTENSION_TIME_MS (1 * 60 * 60 * 1000) // +1 Hour on interaction
-#define HEARTBEAT_INTERVAL_MS (15 * 60 * 1000) // 15 Minutes (in Cooldown)
-#define SENTRY_HEARTBEAT_MS (6 * 60 * 60 * 1000) // 6 Hours (in Deep Sleep)
-
-// --- Garage / Home Settings ---
-double homeLat = 0.0;
-double homeLon = 0.0;
-#define HOME_RADIUS_M 50.0
-#define EVENT_IGNITION 1
-#define EVENT_HOME 2
 
 // --- Objects ---
 SX1262 radio = new Module(LORA_NSS, LORA_DIO1, LORA_NRST, LORA_BUSY);
@@ -77,6 +44,7 @@ unsigned long stateStartTime = 0;
 unsigned long cooldownEndTime = 0;
 unsigned long lastHeartbeat = 0;
 bool homeArrivalSent = false;
+bool sessionStatsSent = false;
 
 // --- Helpers ---
 float readBatteryVoltage() {
@@ -186,24 +154,45 @@ void loop() {
             if (gps.location.isUpdated() || gps.speed.isUpdated()) {
                 oiler.update(gps.speed.kmph(), gps.location.lat(), gps.location.lng(), true);
                 
-                // Garage Opener Logic: Check Distance to Home
+                // Garage Opener & AI Stats Logic
                 if (gps.location.isValid() && homeLat != 0.0 && homeLon != 0.0) {
                     double distToHome = TinyGPSPlus::distanceBetween(
                         gps.location.lat(), gps.location.lng(),
                         homeLat, homeLon
                     );
                     
+                    // 1. Pre-Arrival: Send AI Stats (e.g. 500m before)
+                    if (distToHome < HOME_PRE_ARRIVAL_RADIUS_M && !sessionStatsSent) {
+                        Serial.println("Approaching Home! Sending Session Stats for AI...");
+                        lora.sendSessionStats(oiler.getSessionStats(), NUM_RANGES);
+                        sessionStatsSent = true;
+                    }
+
+                    // 2. Arrival: Open Garage (e.g. 50m)
                     if (distToHome < HOME_RADIUS_M && !homeArrivalSent) {
                         Serial.println("Arrived Home! Sending Garage Signal...");
                         lora.sendEvent(EVENT_HOME);
                         homeArrivalSent = true;
-                    } else if (distToHome > (HOME_RADIUS_M * 2)) {
-                        // Reset flag if we move away (hysteresis)
+                    } 
+                    
+                    // Reset flags if we move away (Hysteresis)
+                    if (distToHome > (HOME_PRE_ARRIVAL_RADIUS_M * 1.5)) {
+                        sessionStatsSent = false;
                         homeArrivalSent = false;
                     }
                 }
             }
-            oiler.loop();(Manual Activation)
+            oiler.loop();
+
+            // 4. Periodic Status Update (e.g. every 5 mins)
+            if (now - lastHeartbeat > (5 * 60 * 1000)) {
+                lora.sendStatus(readBatteryVoltage(), oiler.currentTankLevelMl, oiler.getTotalDistance());
+                lastHeartbeat = now;
+            }
+            break;
+
+        // ---------------------------------------------------------
+        // COOLDOWN MODE: Listening (Manual Activation)
         // ---------------------------------------------------------
         case STATE_COOLDOWN:
             // 1. Check Ignition

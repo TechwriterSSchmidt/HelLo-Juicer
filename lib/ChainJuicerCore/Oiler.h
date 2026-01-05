@@ -95,6 +95,10 @@ public:
     unsigned long getPumpCycles() { return pumpCycles; }
     void resetStats();
     
+    // Session Stats (Accumulated since boot)
+    uint32_t sessionTimeInRanges[NUM_RANGES]; // Seconds in each range
+    uint32_t* getSessionStats() { return sessionTimeInRanges; }
+
     // Time Stats (History for last 20 oilings)
     struct StatsHistory {
         uint8_t head;

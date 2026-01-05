@@ -57,6 +57,7 @@ Oiler::Oiler(IPersistence* store, int pumpPin, int ledPin, int tempPin)
     // Time Stats Init
     for(int i=0; i<NUM_RANGES; i++) {
         currentIntervalTime[i] = 0.0;
+        sessionTimeInRanges[i] = 0; // Reset session stats on boot
     }
     // Init History
     history.head = 0;
@@ -905,6 +906,7 @@ void Oiler::update(float rawSpeedKmh, double lat, double lon, bool gpsValid) {
 
         if (activeRangeIndex != -1) {
             currentIntervalTime[activeRangeIndex] += dtSeconds;
+            sessionTimeInRanges[activeRangeIndex] += (uint32_t)dtSeconds; // Add to session stats
             progressChanged = true; // Mark for saving
         }
     }
@@ -1252,9 +1254,9 @@ void Oiler::processPump() {
 
     // 3. Logic for Pulse Generation (Interval Check)
     
-    // Bleeding Mode: Fast pumping (65ms Pulse / 300ms Pause)
-    unsigned long effectivePause = bleedingMode ? 300 : dynamicPauseMs;
-    unsigned long effectivePulse = bleedingMode ? 65 : dynamicPulseMs;
+    // Bleeding Mode: Fast pumping (Configurable in config.h)
+    unsigned long effectivePause = bleedingMode ? BLEEDING_PAUSE_MS : dynamicPauseMs;
+    unsigned long effectivePulse = bleedingMode ? BLEEDING_PULSE_MS : dynamicPulseMs;
 
     if (now - lastPulseTime >= effectivePause) {
         
@@ -1276,12 +1278,26 @@ void Oiler::startPulse(unsigned long durationMs) {
     pumpStateStartTime = millis();
     
     if (PUMP_USE_PWM) {
-        pumpState = PUMP_RAMP_UP;
-        pumpCurrentDuty = 130; // Start at ~50% to prevent whining
-        pumpLastStepTime = micros();
+        if (bleedingMode || PUMP_RAMP_UP_MS == 0) {
+            // Hard Kick for Bleeding Mode OR if Ramp is disabled (Skip Ramp Up)
+            pumpState = PUMP_HOLD;
+            pumpCurrentDuty = 255;
+            pumpLastStepTime = micros();
 #ifdef ESP32
-        ledcWrite(_pumpPin, pumpCurrentDuty);
+            ledcWrite(_pumpPin, pumpCurrentDuty);
+#else
+            digitalWrite(_pumpPin, HIGH);
 #endif
+            // Compensate for PUMP_HOLD logic which subtracts PUMP_RAMP_UP_MS
+            pumpTargetDuration = durationMs + PUMP_RAMP_UP_MS;
+        } else {
+            pumpState = PUMP_RAMP_UP;
+            pumpCurrentDuty = 130; // Start at ~50% to prevent whining
+            pumpLastStepTime = micros();
+#ifdef ESP32
+            ledcWrite(_pumpPin, pumpCurrentDuty);
+#endif
+        }
     } else {
         // Fallback: Hard Switching
         digitalWrite(_pumpPin, PUMP_ON);
@@ -1326,14 +1342,28 @@ void Oiler::updatePumpPulse() {
         }
         case PUMP_HOLD: {
             unsigned long holdTime = 0;
-            if (pumpTargetDuration > PUMP_RAMP_UP_MS) {
+            
+            if (bleedingMode) {
+                holdTime = pumpTargetDuration;
+            } else if (pumpTargetDuration > PUMP_RAMP_UP_MS) {
                 holdTime = pumpTargetDuration - PUMP_RAMP_UP_MS;
             }
             
             if (now - pumpStateStartTime >= holdTime) {
-                pumpState = PUMP_RAMP_DOWN;
-                pumpCurrentDuty = 255;
-                pumpLastStepTime = micros();
+                if (bleedingMode || PUMP_RAMP_DOWN_MS == 0) {
+                    // Hard Stop for Bleeding Mode OR if Ramp Down is disabled
+                    pumpCurrentDuty = 0;
+#ifdef ESP32
+                    ledcWrite(_pumpPin, 0);
+#endif
+                    digitalWrite(_pumpPin, PUMP_OFF);
+                    pumpState = PUMP_IDLE;
+                    handlePulseFinished();
+                } else {
+                    pumpState = PUMP_RAMP_DOWN;
+                    pumpCurrentDuty = 255;
+                    pumpLastStepTime = micros();
+                }
             }
             break;
         }

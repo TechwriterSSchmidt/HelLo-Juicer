@@ -109,6 +109,39 @@ void LoraWanHandler::sendEvent(uint8_t eventId) {
     }
 }
 
+void LoraWanHandler::sendSessionStats(uint32_t* timeInRanges, uint8_t numRanges) {
+    if (!_joined) return;
+
+    uint8_t buffer[32];
+    // Byte 0: Type (0x05 = SESSION_STATS)
+    buffer[0] = 0x05;
+    
+    // Payload: 2 Bytes per Range (Seconds)
+    // uint16 max is 65535 seconds = 18 hours. Should be enough for a ride.
+    
+    for(int i=0; i<numRanges; i++) {
+        uint32_t seconds = timeInRanges[i];
+        if (seconds > 65535) seconds = 65535; // Cap at ~18h
+        
+        buffer[1 + (i*2)] = (seconds >> 8) & 0xFF;
+        buffer[1 + (i*2) + 1] = seconds & 0xFF;
+    }
+    
+    size_t len = 1 + (numRanges * 2);
+    
+    Serial.println("LoRa: Sending Session Stats for AI...");
+    int state = _node->sendReceive(buffer, len);
+    
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println("LoRa: Stats Sent");
+        if (_node->downlinkLength > 0) {
+             processDownlink(_node->downlinkData, _node->downlinkLength);
+        }
+    } else {
+        Serial.printf("LoRa: Stats TX Failed, code %d\n", state);
+    }
+}
+
 void LoraWanHandler::encodeStatus(uint8_t* buffer, size_t& len, float voltage, float tankLevel, float totalDistance) {
     // Simple Custom Protocol (CayenneLPP style or custom)
     // Using Custom for compactness

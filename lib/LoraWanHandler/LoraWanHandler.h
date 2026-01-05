@@ -23,6 +23,7 @@ public:
     void sendStatus(float voltage, float tankLevel, float totalDistance);
     void sendAlarm(double lat, double lon);
     void sendEvent(uint8_t eventId); // 1=Ignition, 2=Home
+    void sendSessionStats(uint32_t* timeInRanges, uint8_t numRanges); // Send AI Stats
     
     // Downlink / Remote Config
     void setConfigCallback(void (*callback)(uint32_t newInterval));
