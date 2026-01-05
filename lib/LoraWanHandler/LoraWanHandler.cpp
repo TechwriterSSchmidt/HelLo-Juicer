@@ -2,6 +2,7 @@
 
 LoraWanHandler::LoraWanHandler(SX1262* radioModule) {
     _radio = radioModule;
+    _node = new LoRaWANNode(radioModule, &EU868);
 }
 
 bool LoraWanHandler::begin() {
@@ -18,21 +19,26 @@ bool LoraWanHandler::begin() {
 }
 
 void LoraWanHandler::loop() {
-    // Handle LoRaWAN state machine (re-join if lost, handle RX windows)
-    // This is complex with RadioLib, usually requires an event-driven approach or polling
+    // RadioLib's LoRaWANNode handles most things in sendReceive, 
+    // but if we used interrupts we might need to check flags here.
+    // For now, we are blocking/polling in send methods.
 }
 
 bool LoraWanHandler::join() {
     Serial.println("LoRa: Attempting to join TTN...");
     
     // Configure LoRaWAN Node
-    // This is a placeholder. RadioLib requires setting up the LoRaWANNode instance.
-    // For now, we just simulate the structure.
+    _node->beginOTAA(_joinEui, _devEui, _nwkKey, _appKey);
     
-    // int state = node.activateOTAA();
-    // ...
+    int state = _node->activateOTAA();
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println("LoRa: Joined!");
+        _joined = true;
+    } else {
+        Serial.printf("LoRa: Join failed, code %d\n", state);
+        _joined = false;
+    }
     
-    _joined = true; // Sim
     return _joined;
 }
 
@@ -44,10 +50,25 @@ void LoraWanHandler::sendStatus(float voltage, float tankLevel, float totalDista
     encodeStatus(buffer, len, voltage, tankLevel, totalDistance);
     
     Serial.println("LoRa: Sending Status Update...");
-    // node.sendReceive(buffer, len);
     
-    // After sending, we should check for downlink (Class A device opens RX windows after TX)
-    checkDownlink();
+    // Send uplink
+    int state = _node->sendReceive(buffer, len);
+    
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println("LoRa: TX Success");
+        
+        // Check for downlink
+        if (_node->downlinkLength > 0) {
+            Serial.println("LoRa: Received Downlink!");
+            processDownlink(_node->downlinkData, _node->downlinkLength);
+        }
+    } else {
+        Serial.printf("LoRa: TX Failed, code %d\n", state);
+        // If we get a "network not joined" error, reset flag
+        if (state == RADIOLIB_ERR_NETWORK_NOT_JOINED) {
+            _joined = false;
+        }
+    }
 }
 
 void LoraWanHandler::sendAlarm(double lat, double lon) {
@@ -58,13 +79,23 @@ void LoraWanHandler::sendAlarm(double lat, double lon) {
     encodeAlarm(buffer, len, lat, lon);
     
     Serial.println("LoRa: Sending ALARM!");
-    // node.sendReceive(buffer, len);
+    
+    // Send uplink (Confirmed for Alarm?)
+    // For now unconfirmed to save airtime/duty cycle
+    int state = _node->sendReceive(buffer, len);
+    
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println("LoRa: Alarm Sent");
+    } else {
+        Serial.printf("LoRa: Alarm TX Failed, code %d\n", state);
+    }
 }
 
 void LoraWanHandler::encodeStatus(uint8_t* buffer, size_t& len, float voltage, float tankLevel, float totalDistance) {
-    // Simple Custom Protocol
+    // Simple Custom Protocol (CayenneLPP style or custom)
+    // Using Custom for compactness
     // Byte 0: Type (0x01 = Status)
-    // Byte 1: Voltage (x10)
+    // Byte 1: Voltage (x10) -> 12.5V = 125
     // Byte 2: Tank Level (%)
     // Byte 3-6: Odometer (uint32_t, meters)
     
@@ -82,7 +113,6 @@ void LoraWanHandler::encodeStatus(uint8_t* buffer, size_t& len, float voltage, f
 }
 
 void LoraWanHandler::encodeAlarm(uint8_t* buffer, size_t& len, double lat, double lon) {
-    // Simple Custom Protocol
     // Byte 0: Type (0x99 = ALARM)
     // Byte 1-4: Lat (int32_t, x1000000)
     // Byte 5-8: Lon (int32_t, x1000000)
@@ -105,30 +135,63 @@ void LoraWanHandler::encodeAlarm(uint8_t* buffer, size_t& len, double lat, doubl
     len = 9;
 }
 
+void LoraWanHandler::processDownlink(const uint8_t* data, size_t len) {
+    // Protocol: Byte 0 = 0x02 (Config), Byte 1-2 = Interval (uint16_t)
+    if (len >= 3 && data[0] == 0x02) {
+        uint16_t newInterval = (data[1] << 8) | data[2];
+        Serial.printf("LoRa: Received Downlink Config. New Interval: %d m\n", newInterval);
+        if (_configCallback) {
+            _configCallback(newInterval);
+        }
+    }
+}
+
 void LoraWanHandler::setConfigCallback(void (*callback)(uint32_t)) {
     _configCallback = callback;
 }
 
-void LoraWanHandler::checkDownlink() {
-    // In a real RadioLib implementation, the downlink data is often returned 
-    // by the sendReceive() call or available in a buffer after the RX window.
-    
-    // Simulation of receiving a "Set Interval" command
-    // Protocol: Byte 0 = 0x02 (Config), Byte 1-2 = Interval (uint16_t)
-    
-    // uint8_t rxBuffer[256];
-    // int rxLen = node.getDownlink(rxBuffer);
-    
-    // if (rxLen > 0 && rxBuffer[0] == 0x02) {
-    //     uint16_t newInterval = (rxBuffer[1] << 8) | rxBuffer[2];
-    //     Serial.printf("LoRa: Received Downlink Config. New Interval: %d m\n", newInterval);
-    //     if (_configCallback) {
-    //         _configCallback(newInterval);
-    //     }
-    // }
+void LoraWanHandler::setAppEui(const char* appEui) {
+    _joinEui = strToUInt64(appEui);
 }
 
-void LoraWanHandler::setAppEui(const char* appEui) {
-    // strToBytes(appEui, _appEui, 8);
+void LoraWanHandler::setDevEui(const char* devEui) {
+    _devEui = strToUInt64(devEui);
 }
-// ... Implement other setters
+
+void LoraWanHandler::setAppKey(const char* appKey) {
+    hexStringToBytes(appKey, _appKey, 16);
+    // For LoRaWAN 1.0.x, NwkKey is usually the same as AppKey
+    memcpy(_nwkKey, _appKey, 16);
+}
+
+// Helpers
+uint64_t LoraWanHandler::strToUInt64(const char* str) {
+    uint64_t value = 0;
+    for (int i = 0; i < 16; i++) {
+        char c = str[i];
+        uint8_t nibble = 0;
+        if (c >= '0' && c <= '9') nibble = c - '0';
+        else if (c >= 'A' && c <= 'F') nibble = c - 'A' + 10;
+        else if (c >= 'a' && c <= 'f') nibble = c - 'a' + 10;
+        value = (value << 4) | nibble;
+    }
+    return value;
+}
+
+void LoraWanHandler::hexStringToBytes(const char* str, uint8_t* bytes, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        char high = str[i*2];
+        char low = str[i*2+1];
+        
+        uint8_t h = 0, l = 0;
+        if (high >= '0' && high <= '9') h = high - '0';
+        else if (high >= 'A' && high <= 'F') h = high - 'A' + 10;
+        else if (high >= 'a' && high <= 'f') h = high - 'a' + 10;
+        
+        if (low >= '0' && low <= '9') l = low - '0';
+        else if (low >= 'A' && low <= 'F') l = low - 'A' + 10;
+        else if (low >= 'a' && low <= 'f') l = low - 'a' + 10;
+        
+        bytes[i] = (h << 4) | l;
+    }
+}

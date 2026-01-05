@@ -3,11 +3,11 @@
 
 #include <Arduino.h>
 #include <Adafruit_BNO08x.h>
-#include <Preferences.h>
+#include "Persistence.h"
 
 class ImuHandler {
 public:
-    ImuHandler();
+    ImuHandler(IPersistence* store);
     bool begin(int sda, int scl);
     void update();
     void loop(); // Call frequently
@@ -33,6 +33,9 @@ public:
     bool isCrashed(); // Lean > 70
     bool isMotionDetected(); // Smart Stop helper (Vibration/Accel)
     bool isLeaningTowardsTire(float thresholdDeg); // Returns true if leaning towards the tire (Unsafe to oil)
+    
+    // Power Management
+    void enableMotionInterrupt(); // Configure for Wake-on-Motion (Significant Motion)
 
     // Configuration
     void setChainSide(bool isRight); // false = Left (Default), true = Right
@@ -41,6 +44,7 @@ public:
 private:
     Adafruit_BNO08x _bno;
     sh2_SensorValue_t _sensorValue;
+    IPersistence* _store;
     bool _available = false;
     
     // Orientation

@@ -1,7 +1,8 @@
 #include "ImuHandler.h"
 #include "WebConsole.h"
 
-ImuHandler::ImuHandler() {
+ImuHandler::ImuHandler(IPersistence* store) {
+    _store = store;
     _lastMotionTime = 0;
     // Initialize history
     for(int i=0; i<HISTORY_SIZE; i++) {
@@ -90,6 +91,10 @@ void ImuHandler::update() {
                 if ((_linAccelX*_linAccelX + _linAccelY*_linAccelY + _linAccelZ*_linAccelZ) > (0.5 * 0.5)) { 
                     _lastMotionTime = millis();
                 }
+                break;
+            case SH2_SIG_MOTION:
+                Serial.println("IMU: Significant Motion Detected!");
+                _lastMotionTime = millis();
                 break;
         }
     }
@@ -264,19 +269,19 @@ void ImuHandler::calibrateZero() {
 }
 
 void ImuHandler::saveCalibration() {
-    _prefs.begin("imu", false);
-    _prefs.putFloat("off_r", _offsetRoll);
-    _prefs.putFloat("off_p", _offsetPitch);
-    _prefs.putBool("chain_r", _chainOnRight);
-    _prefs.end();
+    _store->begin("imu", false);
+    _store->putFloat("off_r", _offsetRoll);
+    _store->putFloat("off_p", _offsetPitch);
+    _store->putBool("chain_r", _chainOnRight);
+    _store->end();
 }
 
 void ImuHandler::loadCalibration() {
-    _prefs.begin("imu", true);
-    _offsetRoll = _prefs.getFloat("off_r", 0.0);
-    _offsetPitch = _prefs.getFloat("off_p", 0.0);
-    _chainOnRight = _prefs.getBool("chain_r", true);
-    _prefs.end();
+    _store->begin("imu", true);
+    _offsetRoll = _store->getFloat("off_r", 0.0);
+    _offsetPitch = _store->getFloat("off_p", 0.0);
+    _chainOnRight = _store->getBool("chain_r", true);
+    _store->end();
 }
 
 void ImuHandler::setChainSide(bool isRight) {
@@ -326,5 +331,23 @@ bool ImuHandler::isLeaningTowardsTire(float thresholdDeg) {
         // Chain Left -> Tire Right
         // Unsafe if leaning RIGHT (which is !Left)
         return !isLeaningLeft;
+    }
+}
+
+void ImuHandler::enableMotionInterrupt() {
+    if (!_available) return;
+    
+    Serial.println("IMU: Enabling Motion Interrupt...");
+    
+    // Disable continuous reports to save power and keep INT line clean
+    _bno.enableReport(SH2_ARVR_STABILIZED_RV, 0);
+    _bno.enableReport(SH2_LINEAR_ACCELERATION, 0);
+    
+    // Enable Significant Motion
+    // This should trigger the INT pin when motion is detected
+    if (_bno.enableReport(SH2_SIG_MOTION, 500000)) { // 500ms interval hint
+        Serial.println("IMU: Significant Motion Report Enabled");
+    } else {
+        Serial.println("IMU: Failed to enable Significant Motion");
     }
 }

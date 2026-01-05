@@ -34,19 +34,22 @@ public:
 
 private:
     SX1262* _radio;
+    LoRaWANNode* _node;
     bool _joined = false;
     
-    // Keys (Buffers)
-    uint8_t _appEui[8];
-    uint8_t _devEui[8];
+    // Keys
+    uint64_t _joinEui; // AppEUI
+    uint64_t _devEui;
     uint8_t _appKey[16];
-    uint8_t _nwkKey[16]; // For LoRaWAN 1.1, usually same as AppKey for 1.0
+    uint8_t _nwkKey[16]; 
 
     // Callback for config updates
     void (*_configCallback)(uint32_t) = nullptr;
 
-    // Helper to convert hex string to byte array
-    void strToBytes(const char* str, uint8_t* bytes, size_t len);
+    // Helpers
+    uint64_t strToUInt64(const char* str);
+    void hexStringToBytes(const char* str, uint8_t* bytes, size_t len);
+    void processDownlink(const uint8_t* data, size_t len);
     
     // Payload Encoder (CayenneLPP style or Custom)
     void encodeStatus(uint8_t* buffer, size_t& len, float voltage, float tankLevel, float totalDistance);
