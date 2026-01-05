@@ -1,4 +1,4 @@
-# 📡 HelLo Juicer v0.1.0 (nRF52 + LoRaWAN)
+# 📡 HelLo Juicer v0.2.0 (nRF52 + LoRaWAN)
 
 **The Connected Guardian for your Motorcycle Chain.**
 
@@ -9,13 +9,13 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 *   **Lo**RaWAN Connectivity
 *   **Juicer** Heritage
 
-> **Status:** 🚧 **Under Construction** 🚧
-> This project is currently in active development. The core oiling logic is ported from Chain Juicer v2.0, but the LoRaWAN and BLE features are being implemented.
+> **Status:** 🧪 **Beta**
+> The core oiling logic, LoRaWAN connectivity, and the Sentry Mode (Deep Sleep) are fully implemented. Field testing is currently in progress.
 
 ## Table of Contents
 * [Features](#-features)
+* [Power Management & Sentry Mode](#-power-management--sentry-mode)
 * [LoRaWAN & Connectivity](#-lorawan--connectivity)
-* [Anti-Theft System](#-anti-theft-system)
 * [Hardware](#-hardware)
 * [Installation](#-installation)
 * [Configuration](#-configuration)
@@ -26,14 +26,34 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 | :--- | :--- | :--- |
 | **Speed-Dependent Oiling** | 5 configurable speed ranges. | Identical logic to Chain Juicer v2.0. Optimized for precision. |
 | **LoRaWAN Telemetry** | Long-range status updates. | Sends Odometer, Tank Level, and Battery Voltage to **The Things Network (TTN)** -> Home Assistant. |
-| **Anti-Theft Alarm** | GPS Geofence + Motion Detection. | Triggers a LoRaWAN Alarm Uplink if the bike moves while parked. |
-| **BLE Configuration** | Wireless setup via Phone. | Configure settings using a BLE App (e.g., Bluefruit Connect) instead of a WebUI. |
-| **Smart Power** | Ultra-low power consumption. | Uses the nRF52's efficiency to minimize battery drain when parked. |
+| **Sentry Mode** | Deep Sleep Anti-Theft. | Wakes up on motion, gets GPS fix, and sends Alarm. |
+| **Smart Power** | 3-Stage Power Management. | Drive -> Cooldown (Listen) -> Sentry (Deep Sleep). |
 | **Rain Mode** | Doubles oil amount in wet conditions. | **Button:** 1x Click. **Auto-Off:** 30 min or restart. |
 | **Chain Flush Mode** | Intensive oiling for cleaning. | **Button:** 4x Click. |
 | **Offroad Mode** | Time-based oiling. | **Button:** 3x Click. |
 | **Tank Monitor** | Virtual oil level tracking. | Warns via LED and LoRaWAN when low. |
-| **Aux Port Manager** | Control accessories. | (Planned) Control heated grips or aux lights via MOSFETs. |
+
+## 🔋 Power Management & Sentry Mode
+
+The HelLo Juicer features a sophisticated state machine to protect your bike's battery while remaining vigilant.
+
+1.  **Drive Mode (Ignition ON):**
+    *   Full power. GPS and Oiler are active.
+    *   LoRaWAN sends status updates every 5 minutes.
+
+2.  **Cooldown Mode (Ignition OFF -> 3 Hours):**
+    *   System stays in "Light Sleep".
+    *   Sends a "Heartbeat" every 15 minutes.
+    *   **Remote Config:** This is the window to send LoRaWAN Downlinks to change settings.
+
+3.  **Sentry Mode (After 3 Hours):**
+    *   System enters **Deep Sleep (System OFF)**.
+    *   Power consumption is negligible.
+    *   **Wake-on-Motion:** The IMU (BNO085) remains active in low-power mode. If the bike is moved, the system wakes up immediately.
+
+4.  **Alarm Mode:**
+    *   Triggered by motion in Sentry Mode.
+    *   Acquires GPS lock and transmits coordinates via LoRaWAN.
 
 ## 🌐 LoRaWAN & Connectivity
 
