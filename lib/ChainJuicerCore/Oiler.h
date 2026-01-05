@@ -113,6 +113,10 @@ public:
 
     void resetTimeStats();
 
+    // AI Optimization
+    String generateAiPrompt();
+    void applyAiSuggestion(int rangeIndex, float suggestedInterval, float confidence);
+
     // Time Helper
     int calculateLocalHour(int utcHour, int day, int month, int year);
 

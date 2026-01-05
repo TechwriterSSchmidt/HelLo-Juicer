@@ -799,6 +799,49 @@ void Oiler::resetTimeStats() {
     saveConfig();
 }
 
+String Oiler::generateAiPrompt() {
+    String s = "Analyze the following chain oiler statistics and suggest optimized intervals.\n";
+    s += "Current Config:\n";
+    for(int i=0; i<NUM_RANGES; i++) {
+        SpeedRange* r = getRangeConfig(i);
+        s += "Range " + String(i) + " (" + String(r->minSpeed, 0) + "-" + String(r->maxSpeed, 0) + "km/h): " + String(r->intervalKm, 1) + "km\n";
+    }
+    
+    s += "\nLast 20 Oiling Events:\n";
+    int idx = history.head;
+    for(int i=0; i<history.count; i++) {
+        idx--;
+        if (idx < 0) idx = 19;
+        
+        s += "Event -" + String(i+1) + ": Triggered by Range " + String(history.oilingRange[idx]) + ". Time spent: ";
+        for(int j=0; j<NUM_RANGES; j++) {
+            s += "R" + String(j) + "=" + String(history.timeInRanges[idx][j], 0) + "s ";
+        }
+        s += "\n";
+    }
+    return s;
+}
+
+void Oiler::applyAiSuggestion(int rangeIndex, float suggestedInterval, float confidence) {
+    if (rangeIndex < 0 || rangeIndex >= NUM_RANGES) return;
+    if (confidence < 0.0 || confidence > 1.0) return;
+    
+    SpeedRange* r = getRangeConfig(rangeIndex);
+    
+    // Confidence Approximation (Weighted Average)
+    // New = Old * (1 - Conf) + Suggested * Conf
+    float newInterval = r->intervalKm * (1.0 - confidence) + suggestedInterval * confidence;
+    
+    // Sanity Check (e.g. don't go below 1km or above 500km)
+    if (newInterval < 1.0) newInterval = 1.0;
+    if (newInterval > 500.0) newInterval = 500.0;
+    
+    Serial.printf("AI Update Range %d: %.1f -> %.1f (Conf: %.2f)\n", rangeIndex, r->intervalKm, newInterval, confidence);
+    
+    r->intervalKm = newInterval;
+    saveConfig();
+}
+
 int Oiler::calculateLocalHour(int utcHour, int day, int month, int year) {
     // Simple CET/CEST Rule:
     // CEST (UTC+2) starts last Sunday in March, ends last Sunday in October.

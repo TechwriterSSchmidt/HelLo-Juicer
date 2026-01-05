@@ -22,9 +22,11 @@ public:
     // Sending Data
     void sendStatus(float voltage, float tankLevel, float totalDistance);
     void sendAlarm(double lat, double lon);
+    void sendEvent(uint8_t eventId); // 1=Ignition, 2=Home
     
     // Downlink / Remote Config
     void setConfigCallback(void (*callback)(uint32_t newInterval));
+    void setHomeConfigCallback(void (*callback)(double lat, double lon));
     void checkDownlink(); // Call periodically or after TX
 
     // Configuration
@@ -45,6 +47,7 @@ private:
 
     // Callback for config updates
     void (*_configCallback)(uint32_t) = nullptr;
+    void (*_homeConfigCallback)(double, double) = nullptr;
 
     // Helpers
     uint64_t strToUInt64(const char* str);
@@ -54,6 +57,7 @@ private:
     // Payload Encoder (CayenneLPP style or Custom)
     void encodeStatus(uint8_t* buffer, size_t& len, float voltage, float tankLevel, float totalDistance);
     void encodeAlarm(uint8_t* buffer, size_t& len, double lat, double lon);
+    void encodeEvent(uint8_t* buffer, size_t& len, uint8_t eventId);
 };
 
 #endif

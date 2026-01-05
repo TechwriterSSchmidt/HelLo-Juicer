@@ -34,6 +34,13 @@
 #define HEARTBEAT_INTERVAL_MS (15 * 60 * 1000) // 15 Minutes (in Cooldown)
 #define SENTRY_HEARTBEAT_MS (6 * 60 * 60 * 1000) // 6 Hours (in Deep Sleep)
 
+// --- Garage / Home Settings ---
+double homeLat = 0.0;
+double homeLon = 0.0;
+#define HOME_RADIUS_M 50.0
+#define EVENT_IGNITION 1
+#define EVENT_HOME 2
+
 // --- Objects ---
 SX1262 radio = new Module(LORA_NSS, LORA_DIO1, LORA_NRST, LORA_BUSY);
 LoraWanHandler lora(&radio);
@@ -41,6 +48,18 @@ TinyGPSPlus gps;
 NrfPersistence persistence;
 Oiler oiler(&persistence, PUMP_PIN, LED_PIN, -1); // No Temp Sensor for now
 // ImuHandler imuHandler; // TODO: Integrate ImuHandler properly
+
+// --- Callbacks ---
+void onHomeConfig(double lat, double lon) {
+    Serial.printf("Main: Updating Home Coordinates to %.6f, %.6f\n", lat, lon);
+    homeLat = lat;
+    homeLon = lon;
+    
+    persistence.begin("hello", false);
+    persistence.putDouble("home_lat", homeLat);
+    persistence.putDouble("home_lon", homeLon);
+    persistence.end();
+}
 
 // --- State Machine ---
 enum SystemState {
@@ -54,6 +73,7 @@ enum SystemState {
 SystemState currentState = STATE_BOOT;
 unsigned long stateStartTime = 0;
 unsigned long lastHeartbeat = 0;
+bool homeArrivalSent = false;
 
 // --- Helpers ---
 float readBatteryVoltage() {
@@ -72,6 +92,14 @@ void setup() {
     delay(2000); // Safety delay
     Serial.println("HelLo Juicer - Booting...");
 
+    // Check Reset Reason (Wake from System OFF?)
+    uint32_t resetReason = NRF_POWER->RESETREAS;
+    NRF_POWER->RESETREAS = 0xFFFFFFFF; // Clear flags
+    Serial.printf("Reset Reason: 0x%08X\n", resetReason);
+    
+    // Bit 16 (0x10000) = Wake up from System OFF (GPIO Detect)
+    bool wokeFromSleep = (resetReason & 0x00010000);
+
     // 1. Init Pins
     pinMode(IGNITION_PIN, INPUT); // Add Pull-down externally if needed
     pinMode(IMU_INT_PIN, INPUT_PULLUP);
@@ -79,12 +107,17 @@ void setup() {
 
     // 2. Init Components
     persistence.begin("hello", false);
+    homeLat = persistence.getDouble("home_lat", 0.0);
+    homeLon = persistence.getDouble("home_lon", 0.0);
+    Serial.printf("Home Coords: %.6f, %.6f\n", homeLat, homeLon);
     
     // LoRa
     // TODO: Load Keys from Persistence or Secrets
     lora.setAppEui("0000000000000000"); 
     lora.setDevEui("0000000000000000");
     lora.setAppKey("00000000000000000000000000000000");
+    lora.setHomeConfigCallback(onHomeConfig);
+    
     if (!lora.begin()) {
         Serial.println("LoRa Init Failed!");
     }
@@ -99,8 +132,13 @@ void setup() {
     // 3. Initial State
     if (isIgnitionOn()) {
         currentState = STATE_DRIVE;
+        // Send Ignition Event immediately on startup
+        lora.sendEvent(EVENT_IGNITION);
+    } else if (wokeFromSleep) {
+        Serial.println("Woke up from Sentry Mode -> ALARM!");
+        currentState = STATE_ALARM;
     } else {
-        currentState = STATE_COOLDOWN; // Start in Cooldown if booted on battery
+        currentState = STATE_COOLDOWN; // Start in Cooldown if booted on battery (Manual Reset)
     }
     stateStartTime = millis();
 }
@@ -122,6 +160,7 @@ void loop() {
                 currentState = STATE_COOLDOWN;
                 stateStartTime = now;
                 lastHeartbeat = 0; // Force immediate heartbeat
+                homeArrivalSent = false; // Reset for next ride
                 break;
             }
 
@@ -133,6 +172,23 @@ void loop() {
             // 3. Oiler Logic
             if (gps.location.isUpdated() || gps.speed.isUpdated()) {
                 oiler.update(gps.speed.kmph(), gps.location.lat(), gps.location.lng(), true);
+                
+                // Garage Opener Logic: Check Distance to Home
+                if (gps.location.isValid() && homeLat != 0.0 && homeLon != 0.0) {
+                    double distToHome = TinyGPSPlus::distanceBetween(
+                        gps.location.lat(), gps.location.lng(),
+                        homeLat, homeLon
+                    );
+                    
+                    if (distToHome < HOME_RADIUS_M && !homeArrivalSent) {
+                        Serial.println("Arrived Home! Sending Garage Signal...");
+                        lora.sendEvent(EVENT_HOME);
+                        homeArrivalSent = true;
+                    } else if (distToHome > (HOME_RADIUS_M * 2)) {
+                        // Reset flag if we move away (hysteresis)
+                        homeArrivalSent = false;
+                    }
+                }
             }
             oiler.loop();
 
@@ -151,6 +207,7 @@ void loop() {
             if (isIgnitionOn()) {
                 Serial.println("Ignition ON -> Drive Mode");
                 currentState = STATE_DRIVE;
+                lora.sendEvent(EVENT_IGNITION); // Send Ignition Event
                 break;
             }
 

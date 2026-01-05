@@ -91,6 +91,24 @@ void LoraWanHandler::sendAlarm(double lat, double lon) {
     }
 }
 
+void LoraWanHandler::sendEvent(uint8_t eventId) {
+    if (!_joined) return;
+
+    uint8_t buffer[32];
+    size_t len = 0;
+    encodeEvent(buffer, len, eventId);
+    
+    Serial.printf("LoRa: Sending Event %d...\n", eventId);
+    
+    int state = _node->sendReceive(buffer, len);
+    
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println("LoRa: Event Sent");
+    } else {
+        Serial.printf("LoRa: Event TX Failed, code %d\n", state);
+    }
+}
+
 void LoraWanHandler::encodeStatus(uint8_t* buffer, size_t& len, float voltage, float tankLevel, float totalDistance) {
     // Simple Custom Protocol (CayenneLPP style or custom)
     // Using Custom for compactness
@@ -135,19 +153,47 @@ void LoraWanHandler::encodeAlarm(uint8_t* buffer, size_t& len, double lat, doubl
     len = 9;
 }
 
+void LoraWanHandler::encodeEvent(uint8_t* buffer, size_t& len, uint8_t eventId) {
+    // Byte 0: Type (0x03 = EVENT)
+    // Byte 1: Event ID (1=Ignition, 2=Home)
+    
+    buffer[0] = 0x03;
+    buffer[1] = eventId;
+    len = 2;
+}
+
 void LoraWanHandler::processDownlink(const uint8_t* data, size_t len) {
+    if (len < 1) return;
+
     // Protocol: Byte 0 = 0x02 (Config), Byte 1-2 = Interval (uint16_t)
-    if (len >= 3 && data[0] == 0x02) {
+    if (data[0] == 0x02 && len >= 3) {
         uint16_t newInterval = (data[1] << 8) | data[2];
         Serial.printf("LoRa: Received Downlink Config. New Interval: %d m\n", newInterval);
         if (_configCallback) {
             _configCallback(newInterval);
         }
     }
+    // Protocol: Byte 0 = 0x04 (Set Home), Byte 1-4 = Lat, Byte 5-8 = Lon (int32 * 1M)
+    else if (data[0] == 0x04 && len >= 9) {
+        int32_t latI = (data[1] << 24) | (data[2] << 16) | (data[3] << 8) | data[4];
+        int32_t lonI = (data[5] << 24) | (data[6] << 16) | (data[7] << 8) | data[8];
+        
+        double lat = (double)latI / 1000000.0;
+        double lon = (double)lonI / 1000000.0;
+        
+        Serial.printf("LoRa: Received Home Config. Lat: %.6f, Lon: %.6f\n", lat, lon);
+        if (_homeConfigCallback) {
+            _homeConfigCallback(lat, lon);
+        }
+    }
 }
 
 void LoraWanHandler::setConfigCallback(void (*callback)(uint32_t)) {
     _configCallback = callback;
+}
+
+void LoraWanHandler::setHomeConfigCallback(void (*callback)(double, double)) {
+    _homeConfigCallback = callback;
 }
 
 void LoraWanHandler::setAppEui(const char* appEui) {

@@ -26,12 +26,14 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 | :--- | :--- | :--- |
 | **Speed-Dependent Oiling** | 5 configurable speed ranges. | Identical logic to Chain Juicer v2.0. Optimized for precision. |
 | **LoRaWAN Telemetry** | Long-range status updates. | Sends Odometer, Tank Level, and Battery Voltage to **The Things Network (TTN)** -> Home Assistant. |
-| **Sentry Mode** | Deep Sleep Anti-Theft. | Wakes up on motion, gets GPS fix, and sends Alarm. |
+| **Anti-Theft Alarm** | Deep Sleep Sentry Mode. | Wakes up on motion, gets GPS fix, and sends Alarm. |
 | **Smart Power** | 3-Stage Power Management. | Drive -> Cooldown (Listen) -> Sentry (Deep Sleep). |
 | **Rain Mode** | Doubles oil amount in wet conditions. | **Button:** 1x Click. **Auto-Off:** 30 min or restart. |
 | **Chain Flush Mode** | Intensive oiling for cleaning. | **Button:** 4x Click. |
 | **Offroad Mode** | Time-based oiling. | **Button:** 3x Click. |
 | **Tank Monitor** | Virtual oil level tracking. | Warns via LED and LoRaWAN when low. |
+| **Garage Opener** | Smart Home Integration. | Sends LoRaWAN events on **Ignition** and **Home Arrival** (Geofence). |
+| **AI Optimization** | Adaptive Learning. | Generates prompts for AI analysis and applies settings with confidence weighting. |
 
 ## 🔋 Power Management & Sentry Mode
 
