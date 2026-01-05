@@ -28,9 +28,11 @@
 
 #define IGNITION_PIN 5 // Input to detect 12V (via divider)
 #define BATTERY_PIN 4  // ADC for Battery Voltage
+#define USER_BUTTON_PIN 0 // Boot Button (P0.00) - Change if using external button
 
 // --- Constants ---
-#define COOLDOWN_TIME_MS (3 * 60 * 60 * 1000) // 3 Hours
+#define COOLDOWN_TIME_MS (5 * 60 * 60 * 1000) // 5 Hours Listening Mode
+#define EXTENSION_TIME_MS (1 * 60 * 60 * 1000) // +1 Hour on interaction
 #define HEARTBEAT_INTERVAL_MS (15 * 60 * 1000) // 15 Minutes (in Cooldown)
 #define SENTRY_HEARTBEAT_MS (6 * 60 * 60 * 1000) // 6 Hours (in Deep Sleep)
 
@@ -72,6 +74,7 @@ enum SystemState {
 
 SystemState currentState = STATE_BOOT;
 unsigned long stateStartTime = 0;
+unsigned long cooldownEndTime = 0;
 unsigned long lastHeartbeat = 0;
 bool homeArrivalSent = false;
 
@@ -103,6 +106,7 @@ void setup() {
     // 1. Init Pins
     pinMode(IGNITION_PIN, INPUT); // Add Pull-down externally if needed
     pinMode(IMU_INT_PIN, INPUT_PULLUP);
+    pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
     pinMode(BATTERY_PIN, INPUT);
 
     // 2. Init Components
@@ -134,21 +138,30 @@ void setup() {
         currentState = STATE_DRIVE;
         // Send Ignition Event immediately on startup
         lora.sendEvent(EVENT_IGNITION);
-    } else if (wokeFromSleep) {
-        Serial.println("Woke up from Sentry Mode -> ALARM!");
-        currentState = STATE_ALARM;
+    } el// Check Wakeup Source
+        if (digitalRead(USER_BUTTON_PIN) == LOW) {
+            Serial.println("Wakeup: Button -> Listening Mode");
+            currentState = STATE_COOLDOWN;
+            cooldownEndTime = millis() + COOLDOWN_TIME_MS;
+        } else if (digitalRead(IMU_INT_PIN) == LOW) {
+            Serial.println("Wakeup: Motion -> ALARM!");
+            currentState = STATE_ALARM;
+        } else {
+            // Fallback
+            Serial.println("Wakeup: Unknown -> Sentry");
+            currentState = STATE_SENTRY;
+        }
     } else {
+        currentState = STATE_SENTRY; // Default to Sleep if not Ignition
         currentState = STATE_COOLDOWN; // Start in Cooldown if booted on battery (Manual Reset)
     }
     stateStartTime = millis();
 }
 
 void loop() {
-    unsigned long now = millis();
-
-    // Global: Handle LoRa Downlinks/Events
-    lora.loop();
-
+    unsigned long now = millis();Sentry Mode immediately");
+                currentState = STATE_SENTRY;
+                stateStartTime = now;
     switch (currentState) {
         // ---------------------------------------------------------
         // DRIVE MODE: Full Functionality
@@ -190,17 +203,7 @@ void loop() {
                     }
                 }
             }
-            oiler.loop();
-
-            // 4. Periodic Status Update (e.g. every 5 mins)
-            if (now - lastHeartbeat > (5 * 60 * 1000)) {
-                lora.sendStatus(readBatteryVoltage(), oiler.currentTankLevelMl, oiler.getTotalDistance());
-                lastHeartbeat = now;
-            }
-            break;
-
-        // ---------------------------------------------------------
-        // COOLDOWN MODE: Listening for 3h
+            oiler.loop();(Manual Activation)
         // ---------------------------------------------------------
         case STATE_COOLDOWN:
             // 1. Check Ignition
@@ -209,6 +212,26 @@ void loop() {
                 currentState = STATE_DRIVE;
                 lora.sendEvent(EVENT_IGNITION); // Send Ignition Event
                 break;
+            }
+
+            // 2. Check Interaction (Extend Timeout)
+            if (lora.downlinkReceived) {
+                lora.downlinkReceived = false;
+                unsigned long oneHourFromNow = now + EXTENSION_TIME_MS;
+                if (oneHourFromNow > cooldownEndTime) {
+                    cooldownEndTime = oneHourFromNow;
+                    Serial.println("Interaction detected! Timeout extended.");
+                }
+            }
+
+            // 3. Check Timeout
+            if (now > cooldownEndTime) {
+                Serial.println("Listening Timeout -> Entering Sentry Mode");
+                currentState = STATE_SENTRY;
+                break;
+            }
+
+            // 4break;
             }
 
             // 2. Check Timeout (3h)
@@ -226,8 +249,11 @@ void loop() {
                 lastHeartbeat = now;
             }
             
-            // Light Sleep could be added here to save power between loops
-            delay(100); 
+            pinMode(USER_BUTTON_PIN, INPUT_PULLUP);
+
+            // Configure SENSE mechanism (Low level triggers wakeup)
+            nrf_gpio_cfg_sense_input(digitalPinToPinName(IMU_INT_PIN), NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW);
+            nrf_gpio_cfg_sense_input(digitalPinToPinName(USER_BUTTON
             break;
 
         // ---------------------------------------------------------

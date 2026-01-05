@@ -29,6 +29,8 @@ public:
     void setHomeConfigCallback(void (*callback)(double lat, double lon));
     void checkDownlink(); // Call periodically or after TX
 
+    bool downlinkReceived = false; // Flag to indicate interaction
+
     // Configuration
     void setAppEui(const char* appEui);
     void setAppKey(const char* appKey);

@@ -165,6 +165,9 @@ void LoraWanHandler::encodeEvent(uint8_t* buffer, size_t& len, uint8_t eventId) 
 void LoraWanHandler::processDownlink(const uint8_t* data, size_t len) {
     if (len < 1) return;
 
+    // Mark interaction
+    downlinkReceived = true;
+
     // Protocol: Byte 0 = 0x02 (Config), Byte 1-2 = Interval (uint16_t)
     if (data[0] == 0x02 && len >= 3) {
         uint16_t newInterval = (data[1] << 8) | data[2];
