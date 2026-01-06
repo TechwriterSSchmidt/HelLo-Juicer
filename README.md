@@ -4,7 +4,7 @@
 
 The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain Juicer project. Built on the powerful **Heltec T114** (nRF52840 + SX1262), it combines the proven GPS-controlled chain lubrication of its predecessor with long-range **LoRaWAN connectivity** and advanced **Anti-Theft** features.
 
-**Why "HelLo"?**
+**Why "HelLo Juicer"?**
 *   **Hel**tec Hardware
 *   **Lo**RaWAN Connectivity
 *   **Juicer** Heritage
