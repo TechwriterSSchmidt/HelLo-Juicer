@@ -1206,6 +1206,9 @@ void Oiler::processPump() {
     // 1. Update State Machine
     updatePumpPulse();
 
+    // Refresh 'now' because updatePumpPulse might have taken time or updated lastPulseTime
+    now = millis();
+
     // If pump is busy, we don't start a new pulse
     if (pumpState != PUMP_IDLE) {
         // Check Safety Cutoff (Pump stuck ON?)
@@ -1254,18 +1257,33 @@ void Oiler::processPump() {
 
     // 3. Logic for Pulse Generation (Interval Check)
     
-    // Bleeding Mode: Fast pumping (Configurable in config.h)
-    unsigned long effectivePause = bleedingMode ? BLEEDING_PAUSE_MS : dynamicPauseMs;
-    unsigned long effectivePulse = bleedingMode ? BLEEDING_PULSE_MS : dynamicPulseMs;
+    // Simplified Bleeding Logic (hard-coded pulse/pause)
+    if (bleedingMode) {
+        // Guard against clock tick under/overflow
+        if (lastPulseTime > now) {
+             return; // wait until millis() catches up
+        }
+
+        unsigned long nextBleedDue = lastPulseTime + BLEEDING_PAUSE_MS;
+        long remaining = (long)(nextBleedDue - now);
+        if (remaining > 0) {
+            return; // not yet time for next pulse
+        }
+
+        startPulse(BLEEDING_PULSE_MS);
+        return; // Skip all other logic in Bleeding Mode
+    }
+
+    // Normal Oiling Logic
+    unsigned long effectivePause = dynamicPauseMs;
+    unsigned long effectivePulse = dynamicPulseMs;
 
     if (now - lastPulseTime >= effectivePause) {
         
         // Turn Safety Check (Inter-Pulse)
-        if (!bleedingMode) { 
-             if (imu.isLeaningTowardsTire(20.0)) {
-                 // Unsafe! Delay this pulse.
-                 return;
-             }
+        if (imu.isLeaningTowardsTire(20.0)) {
+             // Unsafe! Delay this pulse.
+             return;
         }
 
         // Start Non-Blocking Pulse
@@ -1522,7 +1540,12 @@ void Oiler::startBleeding() {
             
             // Init Pump State for immediate start
             pulseState = false; 
-            lastPulseTime = now - 1000; // Force start
+            // Ensure immediate start without underflow on fresh boot
+            if (now > BLEEDING_PAUSE_MS + 100) {
+                lastPulseTime = now - BLEEDING_PAUSE_MS - 100;
+            } else {
+                lastPulseTime = 0;
+            }
 
             saveConfig(); // Save immediately
         }

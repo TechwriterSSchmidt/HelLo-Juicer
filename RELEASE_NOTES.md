@@ -1,5 +1,8 @@
 # Release Notes
 
+## v0.2.1 - Bleeding Timing Fix (2026-01-06)
+*   **Bleeding Mode:** Fixed a millis-underflow race that caused the pump to run around 6 Hz regardless of the configured 60/320 ms settings. The scheduler now uses hard-coded pulse/pause with an underflow guard, matching the ChainJuicer fix.
+
 ## v0.2.0 - The Sentry Update
 
 This release marks a major milestone in the transition to the nRF52 platform (Heltec T114). The core focus was on implementing a robust power management state machine and the "Sentry" anti-theft system.
