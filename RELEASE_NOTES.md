@@ -10,6 +10,7 @@ This release marks a major milestone in the transition to the nRF52 platform (He
 ### New Features
 
 #### Power Management State Machine
+ 
 The system now operates in four distinct states to balance functionality and power consumption:
 *   **Drive Mode:** Full power. Activated by ignition (12V). GPS, Oiler, and LoRaWAN are active.
 *   **Cooldown Mode:** Active for 3 hours after parking. The system stays in "Light Sleep" to listen for LoRaWAN downlinks (configuration updates) and sends heartbeats every 15 minutes.
