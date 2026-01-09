@@ -10,7 +10,7 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 *   **Juicer** Heritage
 
 > **Status:** 🧪 **Beta**
-> The core oiling logic, LoRaWAN connectivity, and the Sentry Mode (Deep Sleep) are fully implemented. Field testing is currently in progress.
+> The core oiling logic, LoRaWAN connectivity, and the Sentry Mode (Deep Sleep) are fully implemented. Field testing is currently in planning.
 
 ## Table of Contents
 * [Features](#-features)
