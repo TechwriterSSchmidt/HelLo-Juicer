@@ -9,7 +9,7 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 *   **Lo**RaWAN Connectivity
 *   **Juicer** Heritage
 
-> **Status:** 🧪 **Beta**
+> **Status:** **Beta**
 > The core oiling logic, LoRaWAN connectivity, and the Sentry Mode (Deep Sleep) are fully implemented. Field testing is currently in planning.
 
 ## Table of Contents
@@ -20,7 +20,7 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 * [Installation](#-installation)
 * [Configuration](#-configuration)
 
-## 🚀 Features
+## Features
 
 | Feature | Description | Details |
 | :--- | :--- | :--- |
@@ -35,7 +35,7 @@ The **HelLo Juicer** ("Heltec LoRa Juicer") is the next evolution of the Chain J
 | **Garage Opener** | Smart Home Integration. | Sends LoRaWAN events on **Ignition** and **Home Arrival** (Geofence). |
 | **AI Optimization** | Adaptive Learning. | Generates prompts for AI analysis and applies settings with confidence weighting. |
 
-## 🔋 Power Management & Sentry Mode
+## Power Management & Sentry Mode
 
 The HelLo Juicer features a sophisticated state machine to protect your bike's battery while remaining vigilant.
 
@@ -57,7 +57,7 @@ The HelLo Juicer features a sophisticated state machine to protect your bike's b
     *   Triggered by motion in Sentry Mode.
     *   Acquires GPS lock and transmits coordinates via LoRaWAN.
 
-## 🌐 LoRaWAN & Connectivity
+## LoRaWAN & Connectivity
 
 The HelLo Juicer connects your motorcycle to the **Internet of Things**.
 
@@ -74,14 +74,14 @@ Data from TTN can be easily forwarded to **Home Assistant** via MQTT.
 *   **Theft Alert:** Get a critical push notification on your phone immediately when the bike moves.
 *   **Maintenance:** Receive a friendly reminder when the oil tank is low or the battery voltage drops.
 
-### 🧠 AI-Assisted Tuning (Conversational Maintenance)
+### AI-Assisted Tuning (Conversational Maintenance)
 Instead of manually tweaking numbers, use **Home Assistant Assist (LLM)** to talk to your bike:
 
 1.  **Voice Feedback:** Tell your smart home: *"The chain looked a bit dry after today's ride."*
 2.  **AI Analysis:** The LLM analyzes your feedback, considers the current settings, and decides on an adjustment (e.g., "Decrease interval by 10%").
 3.  **Auto-Config:** Home Assistant sends the new optimized interval back to the HelLo Juicer via **LoRaWAN Downlink**.
 
-## 🛡️ Anti-Theft System
+## Anti-Theft System
 
 When the bike is parked (Ignition OFF), the HelLo Juicer enters **Sentry Mode**.
 
@@ -91,7 +91,7 @@ When the bike is parked (Ignition OFF), the HelLo Juicer enters **Sentry Mode**.
     *   **Immediate LoRaWAN Alarm:** Sends a high-priority uplink with GPS coordinates.
     *   **Local Alarm:** (Optional) Triggers a siren/horn output.
 
-## 🔧 Hardware
+## Hardware
 
 *   **MCU:** Heltec T114 (nRF52840 + SX1262 LoRa)
 *   **GPS:** Standard NMEA GPS Module (UART)
@@ -99,11 +99,11 @@ When the bike is parked (Ignition OFF), the HelLo Juicer enters **Sentry Mode**.
 *   **Power:** 12V to 5V Buck Converter (Automotive grade recommended)
 *   **Driver:** MOSFET or Relay for Pump control.
 
-## 📦 Installation
+## Installation
 
 *(Coming Soon: Wiring diagrams and 3D printed housing files)*
 
-## ⚙️ Configuration
+## Configuration
 
 Unlike the ESP32 version, the HelLo Juicer does not host a WiFi Web Interface. Instead, it uses **Bluetooth Low Energy (BLE)**.
 
